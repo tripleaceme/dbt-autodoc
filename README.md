@@ -47,21 +47,18 @@ pip install "dbt-autodoc[all] @ git+https://github.com/tripleaceme/dbt-autodoc.g
 **Prerequisite:** Models must be materialized in the database (run `dbt run` first).
 
 ```bash
-# Generate a draft file for a single model
-dbt run-operation generate_descriptions --args '{model_name: stg_orders}' 2>&1 \
-  | sed -n '/^---AUTODOC-START---$/,/^---AUTODOC-END---$/{//d;p;}' \
+# Write a draft file for a single model
+dbt run-operation generate_descriptions --args '{model_name: stg_orders}' \
   > models/staging/draft_stg_orders.yml
 
-# Generate for all models (output to a single file)
-dbt run-operation generate_descriptions 2>&1 \
-  | sed -n '/^---AUTODOC-START---$/,/^---AUTODOC-END---$/{//d;p;}' \
-  > draft_all_models.yml
+# Write drafts for all models to a single file
+dbt run-operation generate_descriptions > draft_all_models.yml
 
 # Or just print to terminal to review first
 dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
 ```
 
-The `sed` command strips dbt's log noise and extracts only the clean YAML between the markers.
+The YAML goes to stdout (captured by `>`), while dbt's log messages stay in your terminal via stderr.
 
 ### LLM Mode
 
