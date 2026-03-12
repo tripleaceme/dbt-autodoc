@@ -4,17 +4,32 @@ Auto-generate dbt model and column descriptions using heuristics or LLMs.
 
 Stop staring at blank `description: ""` fields. `dbt-autodoc` generates draft descriptions for your models and columns in two ways:
 
-1. **Heuristic mode** — infers descriptions from naming conventions (no API key needed)
-2. **LLM mode** — reads your model SQL and sends it to an LLM for context-aware descriptions
+1. **Heuristic mode** — a dbt macro that infers descriptions from naming conventions (no API key, no Python)
+2. **LLM mode** — a Python CLI that reads your model SQL and sends it to an LLM for context-aware descriptions
 
 Both modes write `draft_<modelname>.yml` files next to your model's `.sql` file for human review.
 
 ## Installation
 
-```bash
-# Heuristic mode only (no API key needed)
-pip install "dbt-autodoc @ git+https://github.com/tripleaceme/dbt-autodoc.git"
+### Heuristic Mode (dbt Package Only)
 
+Add to your `packages.yml`:
+
+```yaml
+packages:
+  - git: "https://github.com/tripleaceme/dbt-autodoc.git"
+    revision: master
+```
+
+```bash
+dbt deps
+```
+
+No Python, no API key — just dbt.
+
+### LLM Mode (Python CLI)
+
+```bash
 # With Claude support
 pip install "dbt-autodoc[anthropic] @ git+https://github.com/tripleaceme/dbt-autodoc.git"
 
@@ -25,30 +40,32 @@ pip install "dbt-autodoc[openai] @ git+https://github.com/tripleaceme/dbt-autodo
 pip install "dbt-autodoc[all] @ git+https://github.com/tripleaceme/dbt-autodoc.git"
 ```
 
-You can also use it as a dbt package (macros only, prints to stdout):
-
-```yaml
-# packages.yml
-packages:
-  - git: "https://github.com/tripleaceme/dbt-autodoc.git"
-    revision: master
-```
-
 ## Quick Start
-
-**Prerequisite:** Run `dbt compile` or `dbt run` first (to generate `manifest.json`).
 
 ### Heuristic Mode (No API Key Needed)
 
-```bash
-# Generate draft files for all models
-dbt-autodoc generate --mode heuristic
+**Prerequisite:** Models must be materialized in the database (run `dbt run` first).
 
-# Generate for a single model
-dbt-autodoc generate --mode heuristic -m stg_orders
+```bash
+# Generate a draft file for a single model
+dbt run-operation generate_descriptions --args '{model_name: stg_orders}' 2>&1 \
+  | sed -n '/^---AUTODOC-START---$/,/^---AUTODOC-END---$/{//d;p;}' \
+  > models/staging/draft_stg_orders.yml
+
+# Generate for all models (output to a single file)
+dbt run-operation generate_descriptions 2>&1 \
+  | sed -n '/^---AUTODOC-START---$/,/^---AUTODOC-END---$/{//d;p;}' \
+  > draft_all_models.yml
+
+# Or just print to terminal to review first
+dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
 ```
 
+The `sed` command strips dbt's log noise and extracts only the clean YAML between the markers.
+
 ### LLM Mode
+
+**Prerequisite:** Run `dbt compile` or `dbt run` first (to generate `manifest.json`).
 
 **1. Configure your provider** — copy `.env.example` to `.env` in your dbt project root:
 
@@ -92,15 +109,6 @@ models/
 2. Copy approved descriptions into your schema `.yml` files
 3. Delete the `draft_*.yml` files
 
-### dbt Macro (Alternative)
-
-The dbt macro prints to stdout instead of writing files:
-
-```bash
-dbt run-operation generate_descriptions
-dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
-```
-
 ## Supported LLM Providers
 
 | Provider | `DBT_AUTODOC_PROVIDER` | SDK | Docs |
@@ -124,7 +132,7 @@ dbt-autodoc providers
 
 ### Heuristic Mode
 
-Parses column and model names against 50+ patterns:
+A pure dbt macro that queries `information_schema` for column names and data types, then pattern-matches against 50+ naming conventions:
 
 | Pattern | Example | Generated Description |
 |---|---|---|
@@ -166,23 +174,21 @@ The LLM returns structured YAML which is written as a draft file.
 Usage: dbt-autodoc [OPTIONS] COMMAND [ARGS]...
 
 Commands:
-  generate   Generate model and column descriptions
+  generate   Generate model and column descriptions using an LLM
   providers  List supported LLM providers and their documentation links
 
 Generate Options:
   -m, --model TEXT         Generate for a specific model (by name)
   -p, --project-dir PATH  Path to dbt project directory (default: .)
-  --mode [llm|heuristic]   Generation mode (default: llm)
-  --dry-run                Estimate cost without calling the LLM (llm mode only)
+  --dry-run                Estimate cost without calling the LLM
   --version                Show version
   --help                   Show help
 ```
 
 ## Requirements
 
-- **dbt**: >= 1.6.0, < 2.0.0
-- **Python**: >= 3.9 (for LLM mode)
-- **manifest.json**: Run `dbt compile` before using LLM mode
+- **Heuristic mode**: dbt >= 1.6.0, < 2.0.0 (no Python needed)
+- **LLM mode**: Python >= 3.9 + `manifest.json` (run `dbt compile` first)
 
 ## License
 

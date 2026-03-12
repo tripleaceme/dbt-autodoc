@@ -12,7 +12,7 @@ from dbt_autodoc import __version__
 @click.group()
 @click.version_option(version=__version__)
 def cli():
-    """dbt-autodoc: Auto-generate dbt model and column descriptions."""
+    """dbt-autodoc: Auto-generate dbt model and column descriptions using LLMs."""
     pass
 
 
@@ -29,59 +29,40 @@ def cli():
     help="Path to the dbt project directory. Defaults to current directory.",
 )
 @click.option(
-    "--mode",
-    type=click.Choice(["llm", "heuristic"], case_sensitive=False),
-    default="llm",
-    help="Generation mode: 'llm' (requires API key) or 'heuristic' (no API key needed).",
-)
-@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
-    help="Estimate token usage and cost without calling the LLM. Only applies to llm mode.",
+    help="Estimate token usage and cost without calling the LLM.",
 )
-def generate(model: str | None, project_dir: Path, mode: str, dry_run: bool):
-    """Generate model and column descriptions and write draft_<model>.yml files.
+def generate(model: str | None, project_dir: Path, dry_run: bool):
+    """Generate model and column descriptions using an LLM.
 
-    Reads your dbt manifest.json and generates descriptions using either
-    heuristic pattern matching or an LLM provider. Draft files are written
-    next to each model's .sql file.
+    Reads your dbt manifest.json, sends model SQL and metadata to your
+    configured LLM provider, and writes draft_<model>.yml files next to
+    each model's .sql file.
 
     Prerequisites:
       1. Run 'dbt compile' or 'dbt run' first (to generate manifest.json)
-      2. For LLM mode: configure .env with provider settings (see .env.example)
-      3. For LLM mode: install provider SDK: pip install dbt-autodoc[anthropic]
+      2. Configure .env with your LLM provider settings (see .env.example)
+      3. Install provider SDK: pip install dbt-autodoc[anthropic] or [openai]
     """
     project_dir = project_dir.resolve()
-    manifest_path = project_dir / "target" / "manifest.json"
 
-    config = None
-    if mode == "llm":
-        from dbt_autodoc.config import AutodocConfig
+    from dbt_autodoc.config import AutodocConfig
 
-        config = AutodocConfig.from_env(project_dir=project_dir)
-        click.echo(f"Mode:     LLM")
-        click.echo(f"Provider: {config.provider}")
-        click.echo(f"Model:    {config.model}")
-    else:
-        click.echo(f"Mode:     Heuristic (no API key needed)")
-        if dry_run:
-            click.echo("Note: --dry-run has no effect in heuristic mode.\n")
-            dry_run = False
+    config = AutodocConfig.from_env(project_dir=project_dir)
 
+    if dry_run:
+        click.echo("DRY RUN: Estimating costs without calling the LLM\n")
+
+    click.echo(f"Provider: {config.provider}")
+    click.echo(f"Model:    {config.model}")
     click.echo(f"Project:  {project_dir}")
-    click.echo(f"Manifest: {manifest_path}\n")
+    click.echo(f"Manifest: {config.manifest_path}\n")
 
     from dbt_autodoc.generator import generate_all
 
-    results = generate_all(
-        manifest_path=manifest_path,
-        project_dir=project_dir,
-        config=config,
-        model_name=model,
-        mode=mode,
-        dry_run=dry_run,
-    )
+    results = generate_all(config, model_name=model, dry_run=dry_run)
 
     # Summary
     click.echo("\n" + "=" * 60)
