@@ -18,7 +18,7 @@ Add to your `packages.yml`:
 ```yaml
 packages:
   - git: "https://github.com/tripleaceme/dbt-autodoc.git"
-    revision: master
+    revision: v1.0.0
 ```
 
 ```bash
