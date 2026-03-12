@@ -64,7 +64,7 @@ The YAML goes to stdout (captured by `>`), while dbt's log messages stay in your
 
 **Prerequisite:** Run `dbt compile` or `dbt run` first (to generate `manifest.json`).
 
-**1. Configure your provider** — copy `.env.example` to `.env` in your dbt project root:
+**1. Configure your provider** — create a `.env` file in your **dbt project root directory** (where your `dbt_project.yml` lives, **not** inside `dbt_packages/`):
 
 ```env
 DBT_AUTODOC_PROVIDER=anthropic
