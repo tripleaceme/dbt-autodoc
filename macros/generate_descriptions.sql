@@ -1,17 +1,11 @@
-{% macro generate_descriptions(model_name=none, output_path=none) %}
+{% macro generate_descriptions(model_name=none) %}
     {#
         Generates draft YAML descriptions for dbt models using heuristic inference.
+        Writes draft_<modelname>.yml next to the model's .sql file automatically.
 
-        Usage (print to terminal):
+        Usage:
+            dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
             dbt run-operation generate_descriptions
-            dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
-
-        Usage (write to file automatically):
-            dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
-            ^ Writes draft_stg_orders.yml next to the model's .sql file
-
-        Usage (custom output path):
-            dbt run-operation generate_descriptions --args '{model_name: stg_orders, output_path: my_draft.yml}'
     #}
 
     {# Retrieve all nodes from the dbt graph #}
@@ -25,7 +19,7 @@
         {% endfor %}
 
         {% if nodes | length == 0 %}
-            {{ log("ERROR: Model '" ~ model_name ~ "' not found in project.", info=true) }}
+            {{ log("dbt-autodoc ERROR: Model '" ~ model_name ~ "' not found in project.", info=true) }}
             {{ return('') }}
         {% endif %}
     {% else %}
@@ -40,7 +34,6 @@
 
     {# Build the YAML content #}
     {% set output_lines = [] %}
-
     {% do output_lines.append('# =============================================================================') %}
     {% if model_name %}
         {% do output_lines.append('# Draft descriptions for model: ' ~ model_name) %}
@@ -61,7 +54,6 @@
         {% do output_lines.append('  - name: ' ~ node.name) %}
         {% do output_lines.append('    description: "' ~ model_desc ~ '"') %}
 
-        {# Get columns from the database if the model is materialized #}
         {% set columns = adapter.get_columns_in_relation(ref(node.name)) %}
 
         {% if columns | length > 0 %}
@@ -78,35 +70,26 @@
 
     {% set yaml_content = output_lines | join('\n') %}
 
-    {# Determine file path: auto-detect from model or use custom path #}
-    {% set write_path = none %}
-
-    {% if output_path %}
-        {% set write_path = output_path %}
-    {% elif model_name and nodes | length == 1 %}
-        {# Auto-generate path: draft_<modelname>.yml next to the .sql file #}
+    {# Write to file if single model, otherwise print to terminal #}
+    {% if model_name and nodes | length == 1 %}
         {% set model_node = nodes[0] %}
         {% set model_file_path = model_node.original_file_path %}
-        {% set path_parts = model_file_path.split('/') %}
-        {% set dir_parts = path_parts[:-1] %}
+        {% set dir_path = model_file_path | replace(model_file_path.split('/')[-1], '') %}
         {% set draft_filename = 'draft_' ~ model_name ~ '.yml' %}
-        {% set write_path = dir_parts | join('/') ~ '/' ~ draft_filename %}
-    {% endif %}
+        {% set write_path = dir_path ~ draft_filename %}
 
-    {% if write_path %}
-        {# Write to file using Python's open() via Jinja #}
-        {% set project_root = modules.os.getcwd() %}
+        {% set project_root = modules.os.path.abspath('.') %}
         {% set full_path = project_root ~ '/' ~ write_path %}
+        {% set parent_dir = modules.os.path.dirname(full_path) %}
+        {% do modules.os.makedirs(parent_dir, exist_ok=true) %}
 
-        {% do modules.os.makedirs(modules.os.path.dirname(full_path), exist_ok=true) %}
-
-        {% set f = modules.builtins.open(full_path, 'w') %}
-        {% do f.write(yaml_content) %}
-        {% do f.close() %}
+        {# Write file using os.open/write/close (available in dbt's Jinja sandbox) #}
+        {% set fd = modules.os.open(full_path, modules.os.O_WRONLY | modules.os.O_CREAT | modules.os.O_TRUNC, 0o644) %}
+        {% do modules.os.write(fd, (yaml_content ~ '\n').encode('utf-8')) %}
+        {% do modules.os.close(fd) %}
 
         {{ log('dbt-autodoc: Written to ' ~ write_path, info=true) }}
     {% else %}
-        {# No model specified or multiple models — print to terminal #}
         {% for line in output_lines %}
             {{ log(line, info=true) }}
         {% endfor %}
