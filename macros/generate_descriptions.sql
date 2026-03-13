@@ -1,14 +1,12 @@
 {% macro generate_descriptions(model_name=none) %}
     {#
         Generates draft YAML descriptions for dbt models using heuristic inference.
-        Writes draft_<modelname>.yml next to the model's .sql file automatically.
 
         Usage:
             dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
             dbt run-operation generate_descriptions
     #}
 
-    {# Retrieve all nodes from the dbt graph #}
     {% set nodes = [] %}
 
     {% if model_name %}
@@ -32,7 +30,6 @@
 
     {{ log('dbt-autodoc: Generating descriptions for ' ~ nodes | length ~ ' model(s)...', info=true) }}
 
-    {# Build the YAML content #}
     {% set output_lines = [] %}
     {% do output_lines.append('# =============================================================================') %}
     {% if model_name %}
@@ -68,32 +65,9 @@
         {% do output_lines.append('') %}
     {% endfor %}
 
-    {% set yaml_content = output_lines | join('\n') %}
+    {% for line in output_lines %}
+        {{ log(line, info=true) }}
+    {% endfor %}
 
-    {# Write to file if single model, otherwise print to terminal #}
-    {% if model_name and nodes | length == 1 %}
-        {% set model_node = nodes[0] %}
-        {% set model_file_path = model_node.original_file_path %}
-        {% set dir_path = model_file_path | replace(model_file_path.split('/')[-1], '') %}
-        {% set draft_filename = 'draft_' ~ model_name ~ '.yml' %}
-        {% set write_path = dir_path ~ draft_filename %}
-
-        {% set project_root = modules.os.path.abspath('.') %}
-        {% set full_path = project_root ~ '/' ~ write_path %}
-        {% set parent_dir = modules.os.path.dirname(full_path) %}
-        {% do modules.os.makedirs(parent_dir, exist_ok=true) %}
-
-        {# Write file using os.open/write/close (available in dbt's Jinja sandbox) #}
-        {% set fd = modules.os.open(full_path, modules.os.O_WRONLY | modules.os.O_CREAT | modules.os.O_TRUNC, 0o644) %}
-        {% do modules.os.write(fd, (yaml_content ~ '\n').encode('utf-8')) %}
-        {% do modules.os.close(fd) %}
-
-        {{ log('dbt-autodoc: Written to ' ~ write_path, info=true) }}
-    {% else %}
-        {% for line in output_lines %}
-            {{ log(line, info=true) }}
-        {% endfor %}
-        {{ log('', info=true) }}
-        {{ log('dbt-autodoc: Tip — specify model_name to auto-write a draft file.', info=true) }}
-    {% endif %}
+    {{ log('dbt-autodoc: Done.', info=true) }}
 {% endmacro %}
