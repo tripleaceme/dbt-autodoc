@@ -46,19 +46,20 @@ pip install "dbt-autodoc[all] @ git+https://github.com/tripleaceme/dbt-autodoc.g
 
 **Prerequisite:** Models must be materialized in the database (run `dbt run` first).
 
+Copy `dbt_autodoc.sh` from the package into your dbt project root, then:
+
 ```bash
-# Write a draft file for a single model
-dbt run-operation generate_descriptions --args '{model_name: stg_orders}' \
-  > models/staging/draft_stg_orders.yml
+# Write a draft file for a single model (writes draft_stg_orders.yml next to stg_orders.sql)
+./dbt_autodoc.sh stg_orders
 
 # Write drafts for all models to a single file
-dbt run-operation generate_descriptions > draft_all_models.yml
+./dbt_autodoc.sh --all
 
 # Or just print to terminal to review first
 dbt run-operation generate_descriptions --args '{model_name: stg_orders}'
 ```
 
-The YAML goes to stdout (captured by `>`), while dbt's log messages stay in your terminal via stderr.
+The shell script runs `dbt run-operation` under the hood and strips dbt's log noise, writing clean YAML to a `draft_<model>.yml` file next to the model's `.sql` file.
 
 ### LLM Mode
 
